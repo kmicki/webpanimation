@@ -8,7 +8,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/sizeofint/webpanimation"
+	"github.com/kmicki/webpanimation"
 )
 
 func main() {

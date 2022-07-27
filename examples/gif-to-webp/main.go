@@ -2,11 +2,12 @@ package main
 
 import (
 	"bytes"
-	"github.com/sizeofint/webpanimation"
 	"image/gif"
 	"io/ioutil"
 	"log"
 	"os"
+
+	"github.com/kmicki/webpanimation"
 )
 
 func main() {
