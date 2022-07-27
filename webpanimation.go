@@ -19,6 +19,21 @@ type WebpAnimation struct {
 	WebPPictures           []*WebPPicture
 }
 
+type WebPFrame struct {
+	Image     image.Image
+	Timestamp int
+}
+
+type WebpAnimationDecoded struct {
+	Width     int
+	Height    int
+	LoopCount int
+	FrameCnt  int
+	Frames    []WebPFrame
+	Decoder   *WebPAnimDecoder
+	WebPData  *WebPData
+}
+
 // NewWebpAnimation Initialize animation
 func NewWebpAnimation(width, height, loopCount int) *WebpAnimation {
 	webpAnimation := &WebpAnimation{loopCount: loopCount, Width: width, Height: height}
@@ -30,6 +45,60 @@ func NewWebpAnimation(width, height, loopCount int) *WebpAnimation {
 	return webpAnimation
 }
 
+func Decode(r io.Reader) (*WebpAnimationDecoded, error) {
+	buffer, err := io.ReadAll(r)
+	if err != nil {
+		return nil, errors.New("could not read from Reader")
+	}
+
+	webPData := GenerateWebPData(buffer, (uint)(len(buffer)))
+
+	decoder := WebPAnimDecoderNew(webPData)
+
+	if decoder == nil {
+		DeleteWebPData(webPData)
+		return nil, errors.New("could not create decoder")
+	}
+
+	info := &WebPAnimInfo{}
+	result := WebPAnimDecoderGetInfo(decoder, info)
+	if !result {
+		DeleteWebPData(webPData)
+		WebPAnimDecoderDelete(decoder)
+		return nil, errors.New("could not get decoder info")
+	}
+
+	width := info.GetWidth()
+	height := info.GetHeight()
+	loopcount := info.GetLoopCount()
+	framecnt := info.GetFrameCnt()
+
+	animDecoded := &WebpAnimationDecoded{
+		LoopCount: int(loopcount),
+		Width:     int(width),
+		Height:    int(height),
+		FrameCnt:  int(framecnt),
+		Frames:    make([]WebPFrame, framecnt),
+		Decoder:   decoder,
+		WebPData:  webPData,
+	}
+
+	var buf []byte
+	var timestamp int
+	i := 0
+	for i < int(framecnt) && WebPAnimDecoderGetNext(decoder, &buf, &timestamp, int(width*height*4)) {
+		animDecoded.Frames[i].Timestamp = timestamp
+		animDecoded.Frames[i].Image = &image.RGBA{
+			Pix:    buf,
+			Stride: 4 * animDecoded.Width,
+			Rect:   image.Rect(0, 0, animDecoded.Width, animDecoded.Height),
+		}
+		i++
+	}
+
+	return animDecoded, nil
+}
+
 // ReleaseMemory release memory
 func (wpa *WebpAnimation) ReleaseMemory() {
 	WebPDataClear(wpa.WebPData)
@@ -38,6 +107,11 @@ func (wpa *WebpAnimation) ReleaseMemory() {
 		WebPPictureFree(webpPicture)
 	}
 	WebPAnimEncoderDelete(wpa.AnimationEncoder)
+}
+
+func ReleaseDecoder(decoded *WebpAnimationDecoded) {
+	WebPAnimDecoderDelete(decoded.Decoder)
+	DeleteWebPData(decoded.WebPData)
 }
 
 // AddFrame add frame to animation
@@ -69,6 +143,11 @@ func (wpa *WebpAnimation) AddFrame(img image.Image, timestamp int, webpcfg WebPC
 		return errors.New("Failed to add frame in animation ecoder")
 	}
 	return nil
+}
+
+// Get Frame
+func (wpa *WebpAnimation) GetFrames() (frames []image.Image, err error) {
+	return nil, nil
 }
 
 // Encode encode animation

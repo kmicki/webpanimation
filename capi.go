@@ -4,8 +4,28 @@ package webpanimation
 #cgo CFLAGS: -Wno-pointer-sign -DHAVE_CONFIG_H
 #cgo !windows LDFLAGS: -lm
 
+#include <stdlib.h>
+
 #include "webp_encode.h"
 #include "webp_mux.h"
+#include "webp_demux.h"
+
+WebPData* GenerateWebPData(uint8_t* indata, size_t n)
+{
+	uint8_t *data = (uint8_t*) malloc(n*sizeof(uint8_t));
+	memcpy(data,indata,n*sizeof(uint8_t));
+	struct WebPData webPDataInter = { data, n };
+	struct WebPData *webPData = malloc(sizeof(WebPData));
+	memcpy(webPData, &webPDataInter, sizeof(WebPData));
+
+	return webPData;
+}
+
+void DeleteWebPData(WebPData* webPData)
+{
+	free((uint8_t*) webPData->bytes);
+	free(webPData);
+}
 */
 import "C"
 import (
@@ -18,6 +38,7 @@ type WebPMuxError int
 const (
 	WebpMuxAbiVersion     = 0x0108
 	WebpEncoderAbiVersion = 0x020f
+	WebpDemuxAbiVersion   = 0x0107
 )
 
 const (
@@ -31,7 +52,10 @@ const (
 
 type WebPPicture C.WebPPicture
 type WebPAnimEncoder C.WebPAnimEncoder
+type WebPAnimDecoder C.WebPAnimDecoder
+type WebPAnimInfo C.WebPAnimInfo
 type WebPAnimEncoderOptions C.WebPAnimEncoderOptions
+type WebPAnimDecoderOptions C.WebPAnimDecoderOptions
 type WebPData C.WebPData
 type WebPMux C.WebPMux
 type WebPMuxAnimParams C.WebPMuxAnimParams
@@ -121,6 +145,13 @@ func (wpp *WebPPicture) SetUseArgb(v int) {
 
 func (wpd WebPData) GetBytes() []byte {
 	return C.GoBytes(unsafe.Pointer(((C.WebPData)(wpd)).bytes), (C.int)(((C.WebPData)(wpd)).size))
+}
+
+func GenerateWebPData(data []byte, size uint) *WebPData {
+	return (*WebPData)(C.GenerateWebPData(
+		(*C.uint8_t)(unsafe.Pointer(&data[0])),
+		(C.size_t)(size),
+	))
 }
 
 func WebPDataInit(webPData *WebPData) {
@@ -359,4 +390,71 @@ func WebPMuxAssemble(webPMux *WebPMux, webPData *WebPData) WebPMuxError {
 		(*C.WebPMux)(unsafe.Pointer(webPMux)),
 		(*C.WebPData)(unsafe.Pointer(webPData)),
 	))
+}
+
+// Decoder
+
+func DeleteWebPData(webPData *WebPData) {
+	C.DeleteWebPData((*C.WebPData)(unsafe.Pointer(webPData)))
+}
+
+func WebPAnimDecoderDelete(webPAnimDecoder *WebPAnimDecoder) {
+	C.WebPAnimDecoderDelete(
+		(*C.WebPAnimDecoder)(unsafe.Pointer(webPAnimDecoder)),
+	)
+}
+
+func WebPAnimDecoderNew(webPData *WebPData) *WebPAnimDecoder {
+	return (*WebPAnimDecoder)(C.WebPAnimDecoderNew(
+		(*C.WebPData)(unsafe.Pointer(webPData)),
+		nil,
+	))
+}
+
+func WebPAnimDecoderGetNext(webPAnimDecoder *WebPAnimDecoder, buffer *([]byte), timestamp *int, size int) bool {
+
+	var tstamp C.int
+	var buf *C.uchar
+
+	result := int(C.WebPAnimDecoderGetNext(
+		(*C.WebPAnimDecoder)(unsafe.Pointer(webPAnimDecoder)),
+		(**C.uchar)(unsafe.Pointer(&buf)),
+		(*C.int)(unsafe.Pointer(&tstamp)),
+	)) != 0
+
+	if !result {
+		return false
+	}
+
+	*buffer = C.GoBytes(unsafe.Pointer(buf), C.int(size))
+	*timestamp = int(tstamp)
+
+	return true
+}
+
+func WebPAnimDecoderGetInfo(webPAnimDecoder *WebPAnimDecoder, webPAnimInfo *WebPAnimInfo) bool {
+	return int(C.WebPAnimDecoderGetInfo(
+		(*C.WebPAnimDecoder)(unsafe.Pointer(webPAnimDecoder)),
+		(*C.WebPAnimInfo)(unsafe.Pointer(webPAnimInfo)),
+	)) != 0
+}
+
+func (wpi WebPAnimInfo) GetWidth() uint32 {
+	return uint32(((C.WebPAnimInfo)(wpi)).canvas_width)
+}
+
+func (wpi WebPAnimInfo) GetHeight() uint32 {
+	return uint32(((C.WebPAnimInfo)(wpi)).canvas_height)
+}
+
+func (wpi WebPAnimInfo) GetLoopCount() uint32 {
+	return uint32(((C.WebPAnimInfo)(wpi)).loop_count)
+}
+
+func (wpi WebPAnimInfo) GetBgColor() uint32 {
+	return uint32(((C.WebPAnimInfo)(wpi)).bgcolor)
+}
+
+func (wpi WebPAnimInfo) GetFrameCnt() uint32 {
+	return uint32(((C.WebPAnimInfo)(wpi)).frame_count)
 }
