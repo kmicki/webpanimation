@@ -439,6 +439,12 @@ func WebPAnimDecoderGetInfo(webPAnimDecoder *WebPAnimDecoder, webPAnimInfo *WebP
 	)) != 0
 }
 
+func WebPAnimDecoderReset(webPAnimDecoder *WebPAnimDecoder) {
+	C.WebPAnimDecoderReset(
+		(*C.WebPAnimDecoder)(unsafe.Pointer(webPAnimDecoder)),
+	)
+}
+
 func (wpi WebPAnimInfo) GetWidth() uint32 {
 	return uint32(((C.WebPAnimInfo)(wpi)).canvas_width)
 }

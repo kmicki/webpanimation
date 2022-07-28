@@ -45,7 +45,8 @@ func NewWebpAnimation(width, height, loopCount int) *WebpAnimation {
 	return webpAnimation
 }
 
-func Decode(r io.Reader) (*WebpAnimationDecoded, error) {
+// Get only info, without decoded frames
+func GetInfo(r io.Reader) (*WebpAnimationDecoded, error) {
 	buffer, err := io.ReadAll(r)
 	if err != nil {
 		return nil, errors.New("could not read from Reader")
@@ -78,22 +79,88 @@ func Decode(r io.Reader) (*WebpAnimationDecoded, error) {
 		Width:     int(width),
 		Height:    int(height),
 		FrameCnt:  int(framecnt),
-		Frames:    make([]WebPFrame, framecnt),
+		Frames:    make([]WebPFrame, 0, framecnt),
 		Decoder:   decoder,
 		WebPData:  webPData,
 	}
 
+	return animDecoded, nil
+}
+
+// Get next frame without inserting into animDecoded.Frames
+func GetNextFrame(animDecoded *WebpAnimationDecoded) (*WebPFrame, bool) {
 	var buf []byte
 	var timestamp int
-	i := 0
-	for i < int(framecnt) && WebPAnimDecoderGetNext(decoder, &buf, &timestamp, int(width*height*4)) {
-		animDecoded.Frames[i].Timestamp = timestamp
-		animDecoded.Frames[i].Image = &image.RGBA{
-			Pix:    buf,
-			Stride: 4 * animDecoded.Width,
-			Rect:   image.Rect(0, 0, animDecoded.Width, animDecoded.Height),
-		}
-		i++
+	if WebPAnimDecoderGetNext(animDecoded.Decoder, &buf, &timestamp, 4*animDecoded.Width*animDecoded.Height) {
+		return &WebPFrame{
+			Timestamp: timestamp,
+			Image: &image.RGBA{
+				Pix:    buf,
+				Stride: 4 * animDecoded.Width,
+				Rect:   image.Rect(0, 0, animDecoded.Width, animDecoded.Height),
+			},
+		}, true
+	}
+	return nil, false
+}
+
+// Get next frame without and insert into animDecoded.Frames
+func DecodeNextFrame(animDecoded *WebpAnimationDecoded) bool {
+	var buf []byte
+	var timestamp int
+	if WebPAnimDecoderGetNext(animDecoded.Decoder, &buf, &timestamp, 4*animDecoded.Width*animDecoded.Height) {
+		animDecoded.Frames = append(animDecoded.Frames,
+			WebPFrame{
+				Timestamp: timestamp,
+				Image: &image.RGBA{
+					Pix:    buf,
+					Stride: 4 * animDecoded.Width,
+					Rect:   image.Rect(0, 0, animDecoded.Width, animDecoded.Height),
+				},
+			})
+		return true
+	}
+	return false
+}
+
+func DecodeAllFrames(animDecoded *WebpAnimationDecoded) error {
+	WebPAnimDecoderReset(animDecoded.Decoder)
+	animDecoded.Frames = make([]WebPFrame, 0, animDecoded.FrameCnt)
+
+	return DecodeRemainingFrames(animDecoded)
+}
+
+func DecodeRemainingFrames(animDecoded *WebpAnimationDecoded) error {
+
+	var buf []byte
+	var timestamp int
+	for WebPAnimDecoderGetNext(animDecoded.Decoder, &buf, &timestamp, 4*animDecoded.Width*animDecoded.Height) {
+		animDecoded.Frames = append(animDecoded.Frames,
+			WebPFrame{
+				Timestamp: timestamp,
+				Image: &image.RGBA{
+					Pix:    buf,
+					Stride: 4 * animDecoded.Width,
+					Rect:   image.Rect(0, 0, animDecoded.Width, animDecoded.Height),
+				},
+			})
+	}
+
+	return nil
+}
+
+// Decode all frames
+func DecodeAll(r io.Reader) (*WebpAnimationDecoded, error) {
+	animDecoded, err := GetInfo(r)
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = DecodeRemainingFrames(animDecoded)
+
+	if err != nil {
+		return nil, err
 	}
 
 	return animDecoded, nil
