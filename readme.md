@@ -3,7 +3,7 @@ Package is binding to libwebp providing methods to create webp animations from g
 It also allows decoding of webp animations into single frames that implement image.Image
 
 ## Origin
-This repo is a fork of github.com/size-of-int/webpanimation. 
+This repo is a fork of [github.com/sizeofint/webpanimation](github.com/sizeofint/webpanimation). 
 
 It adds decoding capabilities to already existing encoding capabilities.
 
